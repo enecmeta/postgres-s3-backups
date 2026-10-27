@@ -1,5 +1,4 @@
 import { spawn } from "child_process";
-import { createGzip } from "zlib";
 import { S3Client, S3ClientConfig, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { filesize } from "filesize";
@@ -24,7 +23,7 @@ export const backup = async () => {
   console.log("Initiating DB backup...");
 
   const timestamp = new Date().toISOString().replace(/[:.]+/g, '-');
-  let key = `${env.BACKUP_FILE_PREFIX}-${timestamp}.tar.gz`;
+  let key = `${env.BACKUP_FILE_PREFIX}-${timestamp}.dump`;
   if (env.BUCKET_SUBFOLDER) {
     key = env.BUCKET_SUBFOLDER + "/" + key;
   }
@@ -33,7 +32,7 @@ export const backup = async () => {
 
   const dump = spawn("pg_dump", [
     `--dbname=${env.BACKUP_DATABASE_URL}`,
-    "--format=tar",
+    "--format=custom",
     ...env.BACKUP_OPTIONS.split(" ").filter(Boolean),
   ]);
 
@@ -43,7 +42,7 @@ export const backup = async () => {
 
   const upload = new Upload({
     client,
-    params: { Bucket: env.AWS_S3_BUCKET, Key: key, Body: dump.stdout.pipe(createGzip()) },
+    params: { Bucket: env.AWS_S3_BUCKET, Key: key, Body: dump.stdout },
     partSize: 32 * 1024 * 1024,
     queueSize: 4,
   });
