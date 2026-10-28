@@ -19,6 +19,24 @@ const createClient = () => {
   return new S3Client(clientOptions);
 }
 
+const dropPgCache = async () => {
+  console.log("Dropping Postgres page cache...");
+
+  const sql = `COPY (SELECT 1) TO PROGRAM 'find "$PGDATA" -type f -exec dd if={} iflag=nocache count=0 status=none \\;'`;
+  const psql = spawn("psql", [env.BACKUP_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-c", sql]);
+
+  let stderr = "";
+  psql.stderr.on("data", (chunk) => { stderr += chunk; });
+  const code = await new Promise<number | null>((resolve) => psql.on("close", resolve));
+
+  if (code !== 0) {
+    console.log("Could not drop page cache:", stderr.trimEnd());
+    return;
+  }
+
+  console.log("Page cache dropped");
+}
+
 export const backup = async () => {
   console.log("Initiating DB backup...");
 
@@ -70,5 +88,8 @@ export const backup = async () => {
   }
 
   console.log("Backup uploaded:", key, filesize(uploaded));
+
+  await dropPgCache();
+
   console.log("DB backup complete...");
 }
